@@ -25,6 +25,7 @@ package topics
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/surgemq/message"
 )
@@ -55,6 +56,8 @@ var (
 	ErrAuthProviderNotFound = errors.New("auth: Authentication provider not found")
 
 	providers = make(map[string]TopicsProvider)
+
+	providerMutex = sync.RWMutex{}
 )
 
 // TopicsProvider
@@ -72,15 +75,18 @@ func Register(name string, provider TopicsProvider) {
 		panic("topics: Register provide is nil")
 	}
 
+	providerMutex.Lock()
 	if _, dup := providers[name]; dup {
 		panic("topics: Register called twice for provider " + name)
 	}
-
 	providers[name] = provider
+	providerMutex.Unlock()
 }
 
 func Unregister(name string) {
+	providerMutex.Lock()
 	delete(providers, name)
+	providerMutex.Unlock()
 }
 
 type Manager struct {
@@ -88,7 +94,10 @@ type Manager struct {
 }
 
 func NewManager(providerName string) (*Manager, error) {
+
+	providerMutex.RLock()
 	p, ok := providers[providerName]
+	providerMutex.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("session: unknown provider %q", providerName)
 	}
